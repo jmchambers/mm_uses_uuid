@@ -69,7 +69,7 @@ module MmUsesUuid
       @_id = nil
       begin
         trial_id, variant = make_uuid
-        puts "CHECKING #{coll} collection for availability of #{variant} UUID: #{trial_id}"
+        #puts "CHECKING #{coll} collection for availability of #{variant} UUID: #{trial_id}"
         if coll.where(:_id => trial_id).fields(:_id).first.nil?
           @_id = trial_id
         end
