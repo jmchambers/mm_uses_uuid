@@ -6,7 +6,7 @@ Gem::Specification.new do |gem|
   gem.email         = ["j.chambers@gmx.net"]
   gem.description   = %q{MongoMapper plugin that uses a UUID instead of the default ObjectID}
   gem.summary       = %q{UUIDs for MM}
-  gem.homepage      = ''
+  gem.homepage      = 'https://github.com/jmchambers/mm_uses_uuid'
 
   gem.executables   = `git ls-files -- bin/*`.split("\n").map{ |f| File.basename(f) }
   gem.files         = `git ls-files`.split("\n")
