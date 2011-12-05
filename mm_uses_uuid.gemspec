@@ -14,6 +14,7 @@ Gem::Specification.new do |gem|
   gem.name          = "mm_uses_uuid"
   gem.require_paths = ['lib']
   gem.version       = MmUsesUuid::VERSION
+  gem.license       = 'MIT'
   
   gem.add_development_dependency "rspec", "~> 2.7"
   gem.add_development_dependency "bson_ext", "~> 1.5.0"
