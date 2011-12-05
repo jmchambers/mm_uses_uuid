@@ -39,7 +39,7 @@ g = Group.new
 g.find_new_uuid(:ensure_unique_in => Group)
 ```
 
-This will generate a random UUIDs until it finds one that isn't in passed collection (`Group` in the example).
+This will generate random UUIDs until it finds one that isn't in the passed collection (`Group` in the example).
 Obviously, the whole idea of random (type 4) UUIDs is that there is a tiny probability of generating duplicates.
 For this reason, you should only consider using `:ensure_unique_in` if a duplicate UUID would be a disaster for you.
 
