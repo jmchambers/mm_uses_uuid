@@ -45,6 +45,11 @@ describe MmUsesUuid do
     @group._id.subtype.should == BSON::Binary::SUBTYPE_UUID
   end
   
+  it "should not set a new uuid if one as passed as a param" do
+    group_with_passed_id = Group.new(:_id => BSON::Binary.new("3333333333334333y333333333333333", BSON::Binary::SUBTYPE_UUID))
+    group_with_passed_id.id.to_s.should == "3333333333334333y333333333333333"
+  end
+  
   it "should have a useful inspect method that shows the uuid string" do
     @group._id.inspect.should == "<BSON::Binary:'#{@group._id.to_s}'>"
   end
