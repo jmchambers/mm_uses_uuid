@@ -41,7 +41,7 @@ module MmUsesUuid
     end
     
     def new(params = {})
-      passed_id = params.delete(:id) || params.delete(:_id)
+      passed_id = params.delete(:id) || params.delete(:_id) || params.delete('id') || params.delete('_id')
       new_object = super(params)
       if passed_id.is_a?(BSON::Binary) and passed_id.subtype == BSON::Binary::SUBTYPE_UUID
         new_object.id = passed_id

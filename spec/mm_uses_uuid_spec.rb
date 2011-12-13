@@ -46,7 +46,10 @@ describe MmUsesUuid do
   end
   
   it "should not set a new uuid if one as passed as a param" do
-    group_with_passed_id = Group.new(:_id => BSON::Binary.new("3333333333334333y333333333333333", BSON::Binary::SUBTYPE_UUID))
+    group_with_passed_id = Group.new(:id => BSON::Binary.new("3333333333334333y333333333333333", BSON::Binary::SUBTYPE_UUID))
+    group_with_passed_id.id.to_s.should == "3333333333334333y333333333333333"
+    
+    group_with_passed_id = Group.new('_id' => BSON::Binary.new("3333333333334333y333333333333333", BSON::Binary::SUBTYPE_UUID))
     group_with_passed_id.id.to_s.should == "3333333333334333y333333333333333"
   end
   
