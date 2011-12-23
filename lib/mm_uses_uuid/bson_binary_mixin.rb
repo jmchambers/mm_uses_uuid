@@ -18,6 +18,10 @@ module BSON
         
       end
     end
+    
+    def eql?(value)
+      self.to_s == value.to_s
+    end
 
   end
   

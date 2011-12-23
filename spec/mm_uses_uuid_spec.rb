@@ -56,6 +56,12 @@ describe MmUsesUuid do
   it "should have a useful inspect method that shows the uuid string" do
     @group._id.inspect.should == "<BSON::Binary:'#{@group._id.to_s}'>"
   end
+  
+  it "should report that uuid BSON::Binary objects are eql? if they encode the same string" do
+    a = BSON::Binary.new("3333333333334333y333333333333333", BSON::Binary::SUBTYPE_UUID)
+    b = BSON::Binary.new("3333333333334333y333333333333333", BSON::Binary::SUBTYPE_UUID)
+    a.should eql b
+  end
 
   it "should cause associated objects to reference the parent uuid" do
     @group.people << @person
