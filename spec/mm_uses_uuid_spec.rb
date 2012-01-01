@@ -7,7 +7,10 @@ describe MmUsesUuid do
       include MongoMapper::Document
       plugin  MmUsesUuid
       
+      key  :name, String
       many :people, :class_name => 'Person'
+      
+      uuid_lsn 0
       
     end
     
@@ -19,6 +22,9 @@ describe MmUsesUuid do
       key :age
       
       belongs_to :group
+      
+      uuid_lsn 0xf
+      
     end
     
     MongoMapper.connection = Mongo::Connection.new('localhost', 27017)
@@ -36,7 +42,7 @@ describe MmUsesUuid do
       "11111111-1111-4111-y111-111111111111",
       "33333333-3333-4333-y333-333333333333"
     )
-    @group  = Group.create
+    @group  = Group.create(name: 'mongo_mapper fanclub')
     @person = Person.create(name: 'Jon', age: 33)
   end
   
@@ -45,12 +51,21 @@ describe MmUsesUuid do
     @group._id.subtype.should == BSON::Binary::SUBTYPE_UUID
   end
   
+  it "should replace the least significant bits with the integer specified using uuid_lsn" do
+    @group._id.to_s.slice(-1).should == '0'
+    @person._id.to_s.slice(-1).should == 'f'
+  end
+
+  it "should perform a find on the right collection if MongoMapper.find is used" do
+    MongoMapper.find_by_uuid(@person.id, @group.id).map(&:name).should include(@person.name, @group.name)
+  end
+
   it "should not set a new uuid if one as passed as a param" do
-    group_with_passed_id = Group.new(:id => BSON::Binary.new("3333333333334333y333333333333333", BSON::Binary::SUBTYPE_UUID))
-    group_with_passed_id.id.to_s.should == "3333333333334333y333333333333333"
+    group_with_passed_id = Group.new(:id => BSON::Binary.new("3333333333334333y333333333333330", BSON::Binary::SUBTYPE_UUID))
+    group_with_passed_id.id.to_s.should == "3333333333334333y333333333333330"
     
-    group_with_passed_id = Group.new('_id' => BSON::Binary.new("3333333333334333y333333333333333", BSON::Binary::SUBTYPE_UUID))
-    group_with_passed_id.id.to_s.should == "3333333333334333y333333333333333"
+    group_with_passed_id = Group.new('_id' => BSON::Binary.new("3333333333334333y333333333333330", BSON::Binary::SUBTYPE_UUID))
+    group_with_passed_id.id.to_s.should == "3333333333334333y333333333333330"
   end
   
   it "should have a useful inspect method that shows the uuid string" do
@@ -58,8 +73,8 @@ describe MmUsesUuid do
   end
   
   it "should report that uuid BSON::Binary objects are eql? if they encode the same string" do
-    a = BSON::Binary.new("3333333333334333y333333333333333", BSON::Binary::SUBTYPE_UUID)
-    b = BSON::Binary.new("3333333333334333y333333333333333", BSON::Binary::SUBTYPE_UUID)
+    a = BSON::Binary.new("3333333333334333y333333333333330", BSON::Binary::SUBTYPE_UUID)
+    b = BSON::Binary.new("3333333333334333y333333333333330", BSON::Binary::SUBTYPE_UUID)
     a.should eql b
   end
 
@@ -71,7 +86,7 @@ describe MmUsesUuid do
   it "should ensure that the uuid is unique if :ensure_unique_in is set" do
     safe_new_group = Group.new
     safe_new_group.find_new_uuid(:ensure_unique_in => Group)
-    safe_new_group._id.to_s.should == "3333333333334333y333333333333333"
+    safe_new_group._id.to_s.should == "3333333333334333y333333333333330"
   end
   
   context 'finding by uuid' do

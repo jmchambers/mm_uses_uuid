@@ -2,6 +2,42 @@ require 'mongo_mapper'
 require_relative "mm_uses_uuid/version"
 require_relative "mm_uses_uuid/bson_binary_mixin"
 
+class BsonUuid
+  def self.to_mongo(value)
+    case value
+    when String
+      BSON::Binary.new(value, BSON::Binary::SUBTYPE_UUID)
+    when BSON::Binary, NilClass
+      value
+    else
+      raise "BsonUuid cannot be of type #{value.class}. String, BSON::Binary and NilClass are the only permitted types"
+    end 
+  end
+  
+  def self.from_mongo(value)
+    value
+  end
+end
+
+module MongoMapper
+  
+  @@lsn_class ||= []
+  
+  def self.find_by_uuid(*args)
+    args.flatten!
+    ids_by_class = {}
+    args.each do |id|
+      lsn = id.to_s[-1].hex
+      klass = @@lsn_class[lsn]
+      raise "expected to find a class in @@lsn_class[#{lsn}] of the MongoMapper module but there was no entry. You need to set uuid_lsn in you class." if klass.nil?
+      ids_by_class[klass] ||= []
+      ids_by_class[klass] << id
+    end
+    ids_by_class.map {|klass, ids| klass.find(ids)} .flatten
+  end
+  
+end
+
 module MmUsesUuid
   extend ActiveSupport::Concern
 
@@ -9,23 +45,6 @@ module MmUsesUuid
     key :_id, BsonUuid
   end
 
-  class BsonUuid
-    def self.to_mongo(value)
-      case value
-      when String
-        BSON::Binary.new(value, BSON::Binary::SUBTYPE_UUID)
-      when BSON::Binary, NilClass
-        value
-      else
-        raise "BsonUuid cannot be of type #{value.class}. String, BSON::Binary and NilClass are the only permitted types"
-      end 
-    end
-    
-    def self.from_mongo(value)
-      value
-    end
-  end
-  
   module ClassMethods
     
     def find(*args)
@@ -36,8 +55,8 @@ module MmUsesUuid
       else
         args = BsonUuid.to_mongo(args.first)
       end
-      
       super(args)
+      
     end
     
     def new(params = {})
@@ -49,6 +68,14 @@ module MmUsesUuid
         new_object.find_new_uuid
       end
       new_object
+    end
+
+    def uuid_lsn(lsn_integer)
+      add_class_lsn(self, lsn_integer)
+    end
+    
+    def add_class_lsn(klass, lsn_integer)
+      MongoMapper.class_eval "@@lsn_class[#{lsn_integer}] = #{klass}"
     end
 
   end
@@ -83,9 +110,13 @@ module MmUsesUuid
     end
     
     def make_uuid
-        uuid = SecureRandom.uuid.gsub!('-', '')
-        bson_encoded_uuid = BSON::Binary.new(uuid, BSON::Binary::SUBTYPE_UUID)
-        return bson_encoded_uuid, 'random'
+      uuid = SecureRandom.uuid.gsub!('-', '')
+      lsn_class = MongoMapper.class_variable_get('@@lsn_class')
+      if replacement_lsn = lsn_class.index(self.class)
+        uuid[-1] = replacement_lsn.to_s(16)
+      end
+      bson_encoded_uuid = BSON::Binary.new(uuid, BSON::Binary::SUBTYPE_UUID)
+      return bson_encoded_uuid, 'random'
     end
     
     def id_to_s!
