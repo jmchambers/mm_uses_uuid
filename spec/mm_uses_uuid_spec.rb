@@ -21,6 +21,9 @@ describe MmUsesUuid do
       key :name
       key :age
       
+      key  :interest_ids, Array
+      many :interests, :in => :interest_ids, :class_name => 'UuidModel' # this allows many-to-many polymorphic interests without the need for groups and people to be stored in a single collection
+      
       belongs_to :group
       
       uuid_lsn 0xf
@@ -43,7 +46,11 @@ describe MmUsesUuid do
       "33333333-3333-4333-y333-333333333333"
     )
     @group  = Group.create(name: 'mongo_mapper fanclub')
-    @person = Person.create(name: 'Jon', age: 33)
+    
+    @person = Person.new(name: 'Jon', age: 33)
+    @person.interests << @group
+    @person.interests << @person #I'm very self-centred
+    @person.save
   end
   
   it "should cause newly initialized objects to have a BSON::Binary uuid" do
@@ -57,7 +64,12 @@ describe MmUsesUuid do
   end
 
   it "should perform a find on the right collection if MongoMapper.find is used" do
-    MongoMapper.find(@person.id, @group.id).map(&:name).should include(@person.name, @group.name)
+    UuidModel.find(@person.id, @group.id).map(&:name).should include(@person.name, @group.name)
+  end
+  
+  it "should support polymorphic many to many associations that use LSN encoding" do
+    person = Person.find_by_name 'Jon'
+    person.interests.map(&:name).should include(@person.name, @group.name)
   end
 
   it "should not set a new uuid if one as passed as a param" do

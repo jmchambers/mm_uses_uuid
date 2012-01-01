@@ -61,15 +61,36 @@ class Group
   
   many :people, :class_name => 'Person'
   
+  uuid_lsn 0x0
+end
+```
+
+Once this value is set you can use `UuidModel.find(...)` to find by id (or a list of ids) and it will automatically detect the class by inspecting
+the last character of the UUIDs you pass. So for the example above, all UUIDs generated for new Group objects will end in '0'
+and, if you pass a UUID ending in '0' to `UuidModel.find`, it will pass that request on to `Group.find()`. Clearly, this method only allows you
+to target 16 collections at most as the last nibble can only have values of 0 to 15.
+
+This method can be useful if you need to implement a polymorphic many-to-many association but you don't want to use [Single Collection Inheritance][1]
+because the polymorphic values have significantly different behaviours and attributes. The following example shows how to do this:
+
+```
+class Person
+  include MongoMapper::Document
+  plugin  MmUsesUuid
+  
+  key :name
+  key :age
+  
+  key  :interest_ids, Array
+  many :interests, :in => :interest_ids, :class_name => 'UuidModel' #values can be a Group or a Person
+  
+  belongs_to :group
+  
   uuid_lsn 0xf
 end
 ```
 
-Once this value is set you can use `MongoMapper.find(...)` to find by id (or a list of ids) and it will automatically detect the class by inspecting
-the last character of the UUIDs you pass. So for the example above, all UUIDs generated for new Group objects will end in 'f'
-and, if you pass a UUID ending in 'f' to `MongoMapper.find`, it will pass that request on to `Group.find()`.
-
-This method can be useful if you need to store long lists of ids, but don't want to incur any additional complexity and storage by storing
-the collection name as well. However, the method can only be used to distinguish between 16 collections as we only use a single hex digit.
-
 Copyright (c) 2011 PeepAll Ltd, released under the MIT license
+
+
+[1]: http://mongomapper.com/documentation/plugins/single-collection-inheritance.html

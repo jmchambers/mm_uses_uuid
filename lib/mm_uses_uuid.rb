@@ -19,7 +19,22 @@ class BsonUuid
   end
 end
 
-module MongoMapper
+class MongoMapper::Plugins::Associations::InArrayProxy
+
+  def find_target
+    return [] if ids.blank?
+    if klass == UuidModel
+      UuidModel.find(*criteria[:_id])
+    else
+      all
+    end
+  end
+  
+end
+
+class UuidModel
+  
+  include MongoMapper::Document
   
   @@lsn_class ||= []
   
@@ -35,7 +50,7 @@ module MongoMapper
     end
     ids_by_class.map {|klass, ids| klass.find(ids)} .flatten
   end
-  
+
 end
 
 module MmUsesUuid
@@ -75,7 +90,7 @@ module MmUsesUuid
     end
     
     def add_class_lsn(klass, lsn_integer)
-      MongoMapper.class_eval "@@lsn_class[#{lsn_integer}] = #{klass}"
+      UuidModel.class_eval "@@lsn_class[#{lsn_integer}] = #{klass}"
     end
 
   end
@@ -111,7 +126,7 @@ module MmUsesUuid
     
     def make_uuid
       uuid = SecureRandom.uuid.gsub!('-', '')
-      lsn_class = MongoMapper.class_variable_get('@@lsn_class')
+      lsn_class = UuidModel.class_variable_get('@@lsn_class')
       if replacement_lsn = lsn_class.index(self.class)
         uuid[-1] = replacement_lsn.to_s(16)
       end
