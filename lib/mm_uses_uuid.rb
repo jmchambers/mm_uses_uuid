@@ -23,7 +23,7 @@ module MongoMapper
   
   @@lsn_class ||= []
   
-  def self.find_by_uuid(*args)
+  def self.find(*args)
     args.flatten!
     ids_by_class = {}
     args.each do |id|

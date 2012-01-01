@@ -57,7 +57,7 @@ describe MmUsesUuid do
   end
 
   it "should perform a find on the right collection if MongoMapper.find is used" do
-    MongoMapper.find_by_uuid(@person.id, @group.id).map(&:name).should include(@person.name, @group.name)
+    MongoMapper.find(@person.id, @group.id).map(&:name).should include(@person.name, @group.name)
   end
 
   it "should not set a new uuid if one as passed as a param" do

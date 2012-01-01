@@ -65,11 +65,11 @@ class Group
 end
 ```
 
-Once this value is set you can use `MongoMapper.find_by_uuid(...)` to find by id (or a list of ids) and it will automatically detect the class by inspecting
+Once this value is set you can use `MongoMapper.find(...)` to find by id (or a list of ids) and it will automatically detect the class by inspecting
 the last character of the UUIDs you pass. So for the example above, all UUIDs generated for new Group objects will end in 'f'
 and, if you pass a UUID ending in 'f' to `MongoMapper.find`, it will pass that request on to `Group.find()`.
 
 This method can be useful if you need to store long lists of ids, but don't want to incur any additional complexity and storage by storing
-the collection name as well. However, because we only use one nibble, this method can only be used for 16 distinct collections.
+the collection name as well. However, the method can only be used to distinguish between 16 collections as we only use a single hex digit.
 
 Copyright (c) 2011 PeepAll Ltd, released under the MIT license
