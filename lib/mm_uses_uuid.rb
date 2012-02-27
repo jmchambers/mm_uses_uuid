@@ -63,15 +63,23 @@ module MmUsesUuid
   module ClassMethods
     
     def find(*args)
-      
+      args = convert_ids_to_BSON(args)
+      super(args)
+    end
+    
+    def find!(*args)
+      args = convert_ids_to_BSON(args)
+      super(args)
+    end
+    
+    def convert_ids_to_BSON(args)
       args.flatten!
       if args.size > 1
         args.map! {|id| BsonUuid.to_mongo(id)}
       else
         args = BsonUuid.to_mongo(args.first)
       end
-      super(args)
-      
+      args
     end
     
     def new(params = {})
