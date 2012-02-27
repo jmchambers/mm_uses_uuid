@@ -6,7 +6,7 @@ class BsonUuid
   def self.to_mongo(value)
     case value
     when String
-      BSON::Binary.new(value, BSON::Binary::SUBTYPE_UUID)
+      BSON::Binary.new(value.gsub('-', ''), BSON::Binary::SUBTYPE_UUID)
     when BSON::Binary, NilClass
       value
     else
