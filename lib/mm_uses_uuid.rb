@@ -103,55 +103,53 @@ module MmUsesUuid
 
   end
 
-  module InstanceMethods
+   
+  def find_new_uuid(options = {})
     
-    def find_new_uuid(options = {})
+    options = {force_safe: false}.merge(options)
       
-      options = {force_safe: false}.merge(options)
-        
-      if not options[:ensure_unique_in]
-        @_id, variant = make_uuid
-        #puts "assuming #{variant} UUID #{@_id} is available"
-        return
-      else
-        find_new_uuid_safely(options[:ensure_unique_in])
-      end
+    if not options[:ensure_unique_in]
+      @_id, variant = make_uuid
+      #puts "assuming #{variant} UUID #{@_id} is available"
+      return
+    else
+      find_new_uuid_safely(options[:ensure_unique_in])
+    end
 
-    end
-    
-    def find_new_uuid_safely(coll)
-
-      @_id = nil
-      begin
-        trial_id, variant = make_uuid
-        #puts "CHECKING #{coll} collection for availability of #{variant} UUID: #{trial_id}"
-        if coll.where(:_id => trial_id).fields(:_id).first.nil?
-          @_id = trial_id
-        end
-      end while @_id.nil?
-
-    end
-    
-    def make_uuid
-      uuid = SecureRandom.uuid.gsub!('-', '')
-      lsn_class = UuidModel.class_variable_get('@@lsn_class')
-      if replacement_lsn = lsn_class.index(self.class)
-        uuid[-1] = replacement_lsn.to_s(16)
-      end
-      bson_encoded_uuid = BSON::Binary.new(uuid, BSON::Binary::SUBTYPE_UUID)
-      return bson_encoded_uuid, 'random'
-    end
-    
-    def id_to_s!
-      @_id = @_id.to_s
-      self
-    end
-    
-    def id_to_s
-      copy = self.clone
-      copy.instance_variable_set '@_id',  @_id.to_s
-      copy
-    end
-    
   end
+  
+  def find_new_uuid_safely(coll)
+
+    @_id = nil
+    begin
+      trial_id, variant = make_uuid
+      #puts "CHECKING #{coll} collection for availability of #{variant} UUID: #{trial_id}"
+      if coll.where(:_id => trial_id).fields(:_id).first.nil?
+        @_id = trial_id
+      end
+    end while @_id.nil?
+
+  end
+  
+  def make_uuid
+    uuid = SecureRandom.uuid.gsub!('-', '')
+    lsn_class = UuidModel.class_variable_get('@@lsn_class')
+    if replacement_lsn = lsn_class.index(self.class)
+      uuid[-1] = replacement_lsn.to_s(16)
+    end
+    bson_encoded_uuid = BSON::Binary.new(uuid, BSON::Binary::SUBTYPE_UUID)
+    return bson_encoded_uuid, 'random'
+  end
+  
+  def id_to_s!
+    @_id = @_id.to_s
+    self
+  end
+  
+  def id_to_s
+    copy = self.clone
+    copy.instance_variable_set '@_id',  @_id.to_s
+    copy
+  end
+  
 end

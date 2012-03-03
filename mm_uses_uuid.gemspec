@@ -16,8 +16,8 @@ Gem::Specification.new do |gem|
   gem.version       = MmUsesUuid::VERSION
   gem.license       = 'MIT'
   
-  gem.add_development_dependency "rspec", "~> 2.7"
-  gem.add_development_dependency "bson_ext", "~> 1.5.0"
-  gem.add_dependency "mongo_mapper", "~> 0.10.1"
+  gem.add_development_dependency "rspec", ">= 2.7"
+  gem.add_development_dependency "bson_ext", ">= 1.5.0"
+  gem.add_dependency "mongo_mapper", ">= 0.10.1"
   
 end
