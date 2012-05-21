@@ -40,6 +40,7 @@ class UuidModel
   
   def self.find(*args)
     args.flatten!
+    single_id = args.length == 1 ? true : false
     ids_by_class = {}
     args.each do |id|
       lsn = id.to_s[-1].hex
@@ -48,7 +49,8 @@ class UuidModel
       ids_by_class[klass] ||= []
       ids_by_class[klass] << id
     end
-    ids_by_class.map {|klass, ids| klass.find(ids)} .flatten
+    result = ids_by_class.map {|klass, ids| klass.find(ids)} .flatten
+    single_id ? result.first : result
   end
 
 end
