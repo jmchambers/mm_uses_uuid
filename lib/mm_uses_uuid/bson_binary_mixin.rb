@@ -9,7 +9,6 @@ module BSON
       if string_render.empty?
         "<BSON::Binary:#{object_id}>"
       else
-        string_length = string_render.length
         if string_render.length > 32
           "<BSON::Binary:'#{string_render[0..8]}...'}'>"
         else
