@@ -52,7 +52,7 @@ class UuidModel
   end
   
   def self.find(*ids)
-    ids.flatten!
+    ids.flatten!.uniq!
     ids_by_class = ids.each_with_object(Hash.new { |hash, key| hash[key] = [] }) do |id, hsh|
       lsn = id.to_s[-1].hex
       klass = @@lsn_class_lookup[lsn]
@@ -66,6 +66,7 @@ class UuidModel
   end
   
   def self.find!(*ids)
+    ids.flatten!.uniq!
     raise MongoMapper::DocumentNotFound, "Couldn't find without an ID" if ids.size == 0
     find(*ids).tap do |result|
       if result.nil? || ids.size != Array(result).size
