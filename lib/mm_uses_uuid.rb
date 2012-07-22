@@ -36,21 +36,42 @@ class UuidModel
   
   include MongoMapper::Document
   
-  @@lsn_class ||= []
+  @@lsn_class_lookup ||= {}
   
-  def self.find(*args)
-    args.flatten!
-    single_id = args.length == 1 ? true : false
-    ids_by_class = {}
-    args.each do |id|
+  def self.add_lsn_mapping(ind, klass)
+    @@lsn_class_lookup[ind] = klass
+    @@class_lsn_lookup = @@lsn_class_lookup.invert
+  end
+  
+  def self.lsn_class_lookup
+    @@lsn_class_lookup
+  end
+  
+  def self.class_lsn_lookup
+    @@class_lsn_lookup
+  end
+  
+  def self.find(*ids)
+    ids.flatten!
+    ids_by_class = ids.each_with_object(Hash.new { |hash, key| hash[key] = [] }) do |id, hsh|
       lsn = id.to_s[-1].hex
-      klass = @@lsn_class[lsn]
-      raise "expected to find a class in @@lsn_class[#{lsn}] of the MongoMapper module but there was no entry. You need to set uuid_lsn in you class." if klass.nil?
-      ids_by_class[klass] ||= []
-      ids_by_class[klass] << id
+      klass = @@lsn_class_lookup[lsn]
+      if klass.nil?
+        raise "expected to find a class in @@lsn_class_lookup[#{lsn}] of the MongoMapper module but there was no entry. You need to set uuid_lsn in your class."
+      end
+      hsh[klass] << id
     end
     result = ids_by_class.map {|klass, ids| klass.find(ids)} .flatten
-    single_id ? result.first : result
+    ids.length == 1 ? result.first : result
+  end
+  
+  def self.find!(*ids)
+    raise MongoMapper::DocumentNotFound, "Couldn't find without an ID" if ids.size == 0
+    find(*ids).tap do |result|
+      if result.nil? || ids.size != Array(result).size
+        raise MongoMapper::DocumentNotFound, "Couldn't find all of the ids (#{ids.join(',')}). Found #{Array(result).size}, but was expecting #{ids.size}"
+      end
+    end
   end
 
 end
@@ -96,13 +117,9 @@ module MmUsesUuid
     end
 
     def uuid_lsn(lsn_integer)
-      add_class_lsn(self, lsn_integer)
+      UuidModel.add_lsn_mapping(lsn_integer, self)
     end
     
-    def add_class_lsn(klass, lsn_integer)
-      UuidModel.class_eval "@@lsn_class[#{lsn_integer}] = #{klass}"
-    end
-
   end
 
    
@@ -135,8 +152,12 @@ module MmUsesUuid
   
   def make_uuid
     uuid = SecureRandom.uuid.gsub!('-', '')
-    lsn_class = UuidModel.class_variable_get('@@lsn_class')
-    if replacement_lsn = lsn_class.index(self.class)
+    if self.class.single_collection_inherited?
+      lookup_class = self.class.collection_name.singularize.camelize.constantize
+    else
+      lookup_class = self.class
+    end
+    if replacement_lsn = UuidModel.class_lsn_lookup[lookup_class]
       uuid[-1] = replacement_lsn.to_s(16)
     end
     bson_encoded_uuid = BSON::Binary.new(uuid, BSON::Binary::SUBTYPE_UUID)
