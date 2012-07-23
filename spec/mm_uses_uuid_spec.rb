@@ -10,7 +10,7 @@ describe MmUsesUuid do
       
       key  :name, String
       belongs_to :owner, :class_name => 'UuidModel', :required => true
-      many :people, :class_name => 'Person'
+      has_many :people, :class_name => 'Person'
       
       uuid_lsn 0
       
@@ -23,8 +23,8 @@ describe MmUsesUuid do
       key :name
       key :age
       
-      key  :interest_ids, Array
-      many :interests, :in => :interest_ids, :class_name => 'UuidModel' # this allows many-to-many polymorphic interests without the need for groups and people to be stored in a single collection
+      key  :interest_ids, Set
+      has_many :interests, :in => :interest_ids, :class_name => 'UuidModel' # this allows many-to-many polymorphic interests without the need for groups and people to be stored in a single collection
       
       belongs_to :group
       
@@ -78,6 +78,12 @@ describe MmUsesUuid do
   it "should support polymorphic many to many associations that use LSN encoding" do
     person = Person.find_by_name 'Jon'
     person.interests.map(&:name).should include(@person.name, @group.name)
+  end
+  
+  it "should return an array for many to many associations when there is only one associated item" do
+    person = Person.new
+    person.interests << @group
+    person.interests.should be_an_instance_of(Array)
   end
 
   it "should not set a new uuid if one as passed as a param" do

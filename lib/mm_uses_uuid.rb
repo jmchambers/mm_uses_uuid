@@ -24,7 +24,7 @@ class MongoMapper::Plugins::Associations::InArrayProxy
   def find_target
     return [] if ids.blank?
     if klass == UuidModel
-      UuidModel.find(*criteria[:_id])
+      out = *UuidModel.find(*criteria[:_id])
     else
       all
     end
