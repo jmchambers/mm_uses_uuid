@@ -18,8 +18,12 @@ module BSON
       end
     end
     
+    def hash
+      [@str, @subtype].hash
+    end
+    
     def eql?(value)
-      self.to_s == value.to_s
+      @str.eql?(value.to_s) && @subtype.eql?(value.subtype)
     end
 
   end

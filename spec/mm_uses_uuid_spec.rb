@@ -1,5 +1,6 @@
 require File.expand_path('../../lib/mm_uses_uuid', __FILE__)
 require 'ruby-debug'
+require 'pry'
 
 describe MmUsesUuid do
   

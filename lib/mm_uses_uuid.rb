@@ -32,51 +32,6 @@ class MongoMapper::Plugins::Associations::InArrayProxy
   
 end
 
-class UuidModel
-  
-  include MongoMapper::Document
-  
-  @@lsn_class_lookup ||= {}
-  
-  def self.add_lsn_mapping(ind, klass)
-    @@lsn_class_lookup[ind] = klass
-    @@class_lsn_lookup = @@lsn_class_lookup.invert
-  end
-  
-  def self.lsn_class_lookup
-    @@lsn_class_lookup
-  end
-  
-  def self.class_lsn_lookup
-    @@class_lsn_lookup
-  end
-  
-  def self.find(*ids)
-    ids = ids.flatten.uniq
-    ids_by_class = ids.each_with_object(Hash.new { |hash, key| hash[key] = [] }) do |id, hsh|
-      lsn = id.to_s[-1].hex
-      klass = @@lsn_class_lookup[lsn]
-      if klass.nil?
-        raise "expected to find a class in @@lsn_class_lookup[#{lsn}] of the MongoMapper module but there was no entry. You need to set uuid_lsn in your class."
-      end
-      hsh[klass] << id
-    end
-    result = ids_by_class.map {|klass, ids| klass.find(ids)} .flatten
-    ids.length == 1 ? result.first : result
-  end
-  
-  def self.find!(*ids)
-    ids = ids.flatten.uniq
-    raise MongoMapper::DocumentNotFound, "Couldn't find without an ID" if ids.size == 0
-    find(*ids).tap do |result|
-      if result.nil? || ids.size != Array(result).size
-        raise MongoMapper::DocumentNotFound, "Couldn't find all of the ids (#{ids.join(',')}). Found #{Array(result).size}, but was expecting #{ids.size}"
-      end
-    end
-  end
-
-end
-
 module MmUsesUuid
   extend ActiveSupport::Concern
 
@@ -86,24 +41,37 @@ module MmUsesUuid
 
   module ClassMethods
     
-    def find(*args)
-      args = convert_ids_to_BSON(args)
-      super(args)
-    end
-    
-    def find!(*args)
-      args = convert_ids_to_BSON(args)
-      super(args)
-    end
-    
-    def convert_ids_to_BSON(args)
-      args.flatten!
-      if args.size > 1
-        args.map! {|id| BsonUuid.to_mongo(id)}
+    def serialize_id(object)
+      case object
+      when MongoMapper::Document, MongoMapper::EmbeddedDocument
+        object.id.to_s
       else
-        args = BsonUuid.to_mongo(args.first)
-      end
-      args
+        object.to_s
+      end       
+    end
+    
+    def deserialize_id(id)
+      BSON::Binary.new(id, BSON::Binary::SUBTYPE_UUID)
+    end
+    
+    def find(*ids)
+      batch_mode = ids.first.is_a?(Array) || ids.length > 1
+      ids.flatten!
+      ids = convert_ids_to_BSON(ids)
+      results = super(ids)
+      batch_mode ? results : results.first
+    end
+    
+    def find!(*ids)
+      batch_mode = ids.first.is_a?(Array) || ids.length > 1
+      ids.flatten!
+      ids = convert_ids_to_BSON(ids)
+      results = super(ids)
+      batch_mode ? results : results.first
+    end
+    
+    def convert_ids_to_BSON(ids)
+      ids.map {|id| BsonUuid.to_mongo(id)}
     end
     
     def new(params = {})
@@ -118,6 +86,7 @@ module MmUsesUuid
     end
 
     def uuid_lsn(lsn_integer)
+      raise "lsn_integer must be from 0-255" unless (0..255).cover?(lsn_integer)
       UuidModel.add_lsn_mapping(lsn_integer, self)
     end
     
@@ -129,8 +98,8 @@ module MmUsesUuid
     options = {force_safe: false}.merge(options)
       
     if not options[:ensure_unique_in]
-      @_id, variant = make_uuid
-      #puts "assuming #{variant} UUID #{@_id} is available"
+      @_id = make_uuid
+      #puts "assuming UUID #{@_id} is available"
       return
     else
       find_new_uuid_safely(options[:ensure_unique_in])
@@ -142,8 +111,8 @@ module MmUsesUuid
 
     @_id = nil
     begin
-      trial_id, variant = make_uuid
-      #puts "CHECKING #{coll} collection for availability of #{variant} UUID: #{trial_id}"
+      trial_id = make_uuid
+      #puts "CHECKING #{coll} collection for availability of UUID: #{trial_id}"
       if coll.where(:_id => trial_id).fields(:_id).first.nil?
         @_id = trial_id
       end
@@ -153,16 +122,17 @@ module MmUsesUuid
   
   def make_uuid
     uuid = SecureRandom.uuid.gsub!('-', '')
-    if self.class.single_collection_inherited?
-      lookup_class = self.class.collection_name.singularize.camelize.constantize
-    else
-      lookup_class = self.class
+    unless self.is_a?(MongoMapper::EmbeddedDocument)
+      if self.class.single_collection_inherited?
+        lookup_class = self.class.collection_name.singularize.camelize.constantize
+      else
+        lookup_class = self.class
+      end
+      replacement_lsn = UuidModel.class_lsn_lookup[lookup_class] || 0x00
+      uuid[-2..-1] = replacement_lsn.to_s(16).rjust(2,'0')
     end
-    if replacement_lsn = UuidModel.class_lsn_lookup[lookup_class]
-      uuid[-1] = replacement_lsn.to_s(16)
-    end
-    bson_encoded_uuid = BSON::Binary.new(uuid, BSON::Binary::SUBTYPE_UUID)
-    return bson_encoded_uuid, 'random'
+    
+    BSON::Binary.new(uuid, BSON::Binary::SUBTYPE_UUID)
   end
   
   def id_to_s!
@@ -176,4 +146,75 @@ module MmUsesUuid
     copy
   end
   
+end
+
+class UuidModel
+  
+  include MongoMapper::Document
+  plugin  MmUsesUuid
+  
+  @@lsn_class_lookup ||= {}
+  
+  class << self
+  
+    def add_lsn_mapping(ind, klass)
+      @@lsn_class_lookup[ind] = klass
+      @@class_lsn_lookup = @@lsn_class_lookup.invert
+    end
+    
+    def lsn_class_lookup
+      @@lsn_class_lookup
+    end
+    
+    def class_lsn_lookup
+      @@class_lsn_lookup
+    end
+    
+    def find(*args)
+      options = args.last.is_a?(Hash) ? args.pop : {}
+      fields  = *options[:fields]
+      batch_mode = args.first.is_a?(Array) || args.length > 1
+      ids = args.flatten.uniq
+      ids_by_class = ids.each_with_object(Hash.new { |hash, key| hash[key] = [] }) do |id, hsh|
+        lsn = id.to_s[-2..-1].hex
+        klass = @@lsn_class_lookup[lsn]
+        if klass.nil?
+          raise "expected to find a class in @@lsn_class_lookup[#{lsn}] of the MongoMapper module but there was no entry. You need to set uuid_lsn in your class."
+        end
+        hsh[klass] << id
+      end
+      
+      if defined? Celluloid
+      
+        future_results = ids_by_class.map do |klass, ids|
+          Celluloid::Future.new { klass.where(:id => convert_ids_to_BSON(ids)).fields(fields).all }
+        end
+        results = future_results.map(&:value).flatten
+        
+      else
+        
+        results = ids_by_class.map do |klass, ids|
+          klass.where(:id => convert_ids_to_BSON(ids)).fields(fields).all
+        end.flatten
+
+      end
+        
+      batch_mode ? results : results.first
+    end
+    alias_method :find_with_fields, :find
+    
+    def find!(*args)
+      options = args.last.is_a?(Hash) ? args.pop : {}
+      ids = args.flatten.uniq
+      raise MongoMapper::DocumentNotFound, "Couldn't find without an ID" if ids.size == 0
+      find(*ids, options).tap do |result|
+        if result.nil? || ids.size != Array(result).size
+          raise MongoMapper::DocumentNotFound, "Couldn't find all of the ids (#{ids.join(',')}). Found #{Array(result).size}, but was expecting #{ids.size}"
+        end
+      end
+    end
+    alias_method :find_with_fields!, :find!
+
+  end
+
 end
