@@ -36,7 +36,7 @@ module MmUsesUuid
   extend ActiveSupport::Concern
 
   included do
-    key :_id, BsonUuid
+    key :_id, BsonUuid, :default => lambda { make_uuid }
   end
 
   module ClassMethods
@@ -52,6 +52,22 @@ module MmUsesUuid
     
     def deserialize_id(id)
       BSON::Binary.new(id, BSON::Binary::SUBTYPE_UUID)
+    end
+    
+    def make_uuid
+      uuid = SecureRandom.uuid.gsub!('-', '')
+      if single_collection_inherited? and not embeddable?
+        lookup_class_name = collection_name.singularize.camelize
+      else
+        lookup_class_name = name
+      end
+      replacement_lsn = UuidModel.class_lsn_lookup[lookup_class_name] || 0x00
+      uuid[-2..-1] = replacement_lsn.to_s(16).rjust(2,'0')
+      BSON::Binary.new(uuid, BSON::Binary::SUBTYPE_UUID)
+      
+    rescue => e
+      binding.pry
+      raise e
     end
     
     def find(*ids)
@@ -74,20 +90,24 @@ module MmUsesUuid
       ids.map {|id| BsonUuid.to_mongo(id)}
     end
     
-    def new(params = {})
-      passed_id = params.delete(:id) || params.delete(:_id) || params.delete('id') || params.delete('_id')
-      new_object = super(params)
-      if passed_id.is_a?(BSON::Binary) and passed_id.subtype == BSON::Binary::SUBTYPE_UUID
-        new_object.id = passed_id
-      else
-        new_object.find_new_uuid
-      end
-      new_object
-    end
+    # def new(params = {})
+      # passed_id = params.delete(:id) || params.delete(:_id) || params.delete('id') || params.delete('_id')
+      # new_object = super(params)
+      # if passed_id
+        # if passed_id.is_a?(BSON::Binary) and passed_id.subtype == BSON::Binary::SUBTYPE_UUID
+          # new_object.id = passed_id
+        # else
+          # raise ArgumentError, "if you pass an explicit :id parameter it must be a valid BSON::Binary::SUBTYPE_UUID"
+        # end
+      # else
+        # new_object.find_new_uuid
+      # end
+      # new_object
+    # end
 
     def uuid_lsn(lsn_integer)
       raise "lsn_integer must be from 0-255" unless (0..255).cover?(lsn_integer)
-      UuidModel.add_lsn_mapping(lsn_integer, self)
+      UuidModel.add_lsn_mapping(lsn_integer, self.name)
     end
     
   end
@@ -121,18 +141,7 @@ module MmUsesUuid
   end
   
   def make_uuid
-    uuid = SecureRandom.uuid.gsub!('-', '')
-    unless self.is_a?(MongoMapper::EmbeddedDocument)
-      if self.class.single_collection_inherited?
-        lookup_class = self.class.collection_name.singularize.camelize.constantize
-      else
-        lookup_class = self.class
-      end
-      replacement_lsn = UuidModel.class_lsn_lookup[lookup_class] || 0x00
-      uuid[-2..-1] = replacement_lsn.to_s(16).rjust(2,'0')
-    end
-    
-    BSON::Binary.new(uuid, BSON::Binary::SUBTYPE_UUID)
+    self.class.make_uuid
   end
   
   def id_to_s!
@@ -157,8 +166,12 @@ class UuidModel
   
   class << self
   
-    def add_lsn_mapping(ind, klass)
-      @@lsn_class_lookup[ind] = klass
+    def add_lsn_mapping(ind, class_name)
+      class_name = class_name.to_s
+      if current_class_name = @@lsn_class_lookup[ind]
+        raise "cannont assign #{class_name} to #{ind} as #{current_class_name} is already assigned to that LSN"
+      end
+      @@lsn_class_lookup[ind] = class_name
       @@class_lsn_lookup = @@lsn_class_lookup.invert
     end
     
@@ -170,41 +183,95 @@ class UuidModel
       @@class_lsn_lookup
     end
     
+    def class_name_from_id(id, options = {})
+      lsn = id.to_s[-2..-1].hex
+      class_name = @@lsn_class_lookup[lsn]
+      if class_name.nil? and options[:error_if_no_lsn_match]
+        raise "expected to find a class name in @@lsn_class_lookup[#{lsn}] of the MongoMapper module but there was no entry. You need to set uuid_lsn in your class."
+      end
+      class_name
+    end
+    
+    def find_by_id(id)
+      find id
+    end
+    
     def find(*args)
+      
+      # raise "foo"
+      
       options = args.last.is_a?(Hash) ? args.pop : {}
       fields  = *options[:fields]
+      fields  = nil if fields.empty?
       batch_mode = args.first.is_a?(Array) || args.length > 1
       ids = args.flatten.uniq
-      ids_by_class = ids.each_with_object(Hash.new { |hash, key| hash[key] = [] }) do |id, hsh|
-        lsn = id.to_s[-2..-1].hex
-        klass = @@lsn_class_lookup[lsn]
-        if klass.nil?
-          raise "expected to find a class in @@lsn_class_lookup[#{lsn}] of the MongoMapper module but there was no entry. You need to set uuid_lsn in your class."
-        end
-        hsh[klass] << id
+      ids.map! {|id| BsonUuid.to_mongo(id)}
+      
+      ids_by_model = ids.each_with_object(Hash.new { |hash, key| hash[key] = [] }) do |id, hsh|
+        model_name = class_name_from_id(id, options)
+        hsh[model_name.constantize] << id if model_name
       end
       
       if defined? Celluloid
-      
-        future_results = ids_by_class.map do |klass, ids|
-          Celluloid::Future.new { klass.where(:id => convert_ids_to_BSON(ids)).fields(fields).all }
+        
+        #NOTE: because IdentityMap is in the current thread only...
+        #we have to manage it ourselves if using Celluloid
+        
+        im_results = []
+        
+        unless fields
+          ids_by_model.clone.each do |model, model_ids|
+            model_ids.each do |model_id|
+              doc = model.get_from_identity_map(model_id)
+              if doc
+                im_results << doc
+                ids_by_model[model].delete model_id
+              end
+            end
+            ids_by_model.delete(model) if ids_by_model[model].empty?
+          end
         end
-        results = future_results.map(&:value).flatten
+      
+        future_db_results = ids_by_model.map do |model, model_ids|
+          query = model.where(:id => model_ids)
+          query = query.fields(fields) if fields
+          Celluloid::Future.new { query.all }
+        end
+        
+        db_results = future_db_results.map(&:value).flatten
+        
+        if fields
+          db_results.each(&:remove_from_identity_map)
+        else
+          db_results.each(&:add_to_identity_map)
+        end
+        
+        results = im_results + db_results
         
       else
         
-        results = ids_by_class.map do |klass, ids|
-          klass.where(:id => convert_ids_to_BSON(ids)).fields(fields).all
+        #NOTE: as this is in the current thread, IdentityMap management is normal
+        
+        results = ids_by_model.map do |model, model_ids|
+          if fields
+            model.where(:id => model_ids).fields(fields).all #models will be removed from the map
+          else
+            model.find model_ids #we use this so that we read and write to the identity map
+          end
         end.flatten
 
       end
-        
+      
       batch_mode ? results : results.first
+      
+    # rescue => e
+      # binding.pry
     end
     alias_method :find_with_fields, :find
     
     def find!(*args)
       options = args.last.is_a?(Hash) ? args.pop : {}
+      options.merge(:error_if_no_lsn_match => true)
       ids = args.flatten.uniq
       raise MongoMapper::DocumentNotFound, "Couldn't find without an ID" if ids.size == 0
       find(*ids, options).tap do |result|
