@@ -22,7 +22,7 @@ Usage
 
 Use the MongoMapper `plugin` method to add MmUsesUuid to your model, for example:
 
-```
+```ruby
 class Group
   include MongoMapper::Document
   plugin  MmUsesUuid
@@ -39,7 +39,7 @@ Ensuring truly unique UUIDs
 If you want to make sure that the UUID hasn't already been used
 you can generate a new one like this:
 
-```
+```ruby
 g = Group.new
 g.find_new_uuid(:ensure_unique_in => Group)
 ```
@@ -54,7 +54,7 @@ Encoding class in the LSN
 It is possible to encode the class of an object in its UUID by forcing the least significant nibble (the rightmost hex character) of its UUIDs to be a particular value.
 To do this, add the `uuid_lsn` method to you model and pass it a single hex character like this:
 
-```
+```ruby
 class Group
   include MongoMapper::Document
   plugin  MmUsesUuid
@@ -73,7 +73,7 @@ to target 16 collections at most as the last nibble can only have values of 0 to
 This method can be useful if you need to implement a polymorphic many-to-many association but you don't want to use [Single Collection Inheritance][1]
 because the polymorphic values have significantly different behaviours and attributes. The following example shows how to do this:
 
-```
+```ruby
 class Person
   include MongoMapper::Document
   plugin  MmUsesUuid
